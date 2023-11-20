@@ -246,5 +246,5 @@ func main() {
 		return c.JSON(200, echo.Map{"status": "ok"})
 	})
 
-	e.Start(":8020")
+	e.Start(":8000")
 }
