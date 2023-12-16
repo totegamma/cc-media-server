@@ -23,10 +23,12 @@ import (
 
 var (
 	bucketName      = ""
+	region          = ""
 	endpointUrl     = ""
 	accessKeyId     = ""
 	accessKeySecret = ""
 	publicBaseUrl   = ""
+	forcePathStyle  = bool(false)
 	quota           = int64(0)
 	db_dsn          = ""
 )
@@ -70,12 +72,19 @@ func deleteFile(client *s3.Client, key string) error {
 	return nil
 }
 
+func mu(a ...interface{}) []interface{} {
+	return a
+}
+
 func main() {
 
 	bucketName = os.Getenv("bucketName")
 	endpointUrl = os.Getenv("endpointUrl")
+	region = os.Getenv("region")
+	accessKeyId = os.Getenv("accessKeyId")
 	accessKeySecret = os.Getenv("accessKeySecret")
 	publicBaseUrl = os.Getenv("publicBaseUrl")
+	forcePathStyle, _ = strconv.ParseBool(os.Getenv("forcePathStyle"))
 	quota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
 	db_dsn = os.Getenv("db_dsn")
 
@@ -95,14 +104,17 @@ func main() {
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
 		config.WithEndpointResolverWithOptions(resolver),
-		config.WithRegion("auto"),
+		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
 	)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	client := s3.NewFromConfig(cfg)
+	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		options.UsePathStyle = forcePathStyle
+	})
 
 	e := echo.New()
 	e.Use(middleware.Logger())
