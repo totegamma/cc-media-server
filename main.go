@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"net/url"
+	"os"
+	"strconv"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,19 +19,16 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"io"
-	"log"
-	"net/url"
-	"os"
-	"strconv"
 )
 
 var (
 	bucketName      = ""
-	accountId       = ""
+	region          = ""
+	endpointUrl     = ""
 	accessKeyId     = ""
 	accessKeySecret = ""
 	publicBaseUrl   = ""
+	forcePathStyle  = bool(false)
 	quota           = int64(0)
 	db_dsn          = ""
 )
@@ -72,10 +75,12 @@ func deleteFile(client *s3.Client, key string) error {
 func main() {
 
 	bucketName = os.Getenv("bucketName")
-	accountId = os.Getenv("accountId")
+	endpointUrl = os.Getenv("endpointUrl")
+	region = os.Getenv("region")
 	accessKeyId = os.Getenv("accessKeyId")
 	accessKeySecret = os.Getenv("accessKeySecret")
 	publicBaseUrl = os.Getenv("publicBaseUrl")
+	forcePathStyle, _ = strconv.ParseBool(os.Getenv("forcePathStyle"))
 	quota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
 	db_dsn = os.Getenv("db_dsn")
 
@@ -89,22 +94,23 @@ func main() {
 	log.Println("bucketName: ", bucketName)
 	log.Println("quota: ", quota)
 
-	r2Resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId),
-		}, nil
+	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{URL: endpointUrl}, nil
 	})
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithEndpointResolverWithOptions(r2Resolver),
-		config.WithRegion("auto"),
+		config.WithEndpointResolverWithOptions(resolver),
+		config.WithRegion(region),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
 	)
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	client := s3.NewFromConfig(cfg)
+	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
+		options.UsePathStyle = forcePathStyle
+	})
 
 	e := echo.New()
 	e.Use(middleware.Logger())
