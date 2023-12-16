@@ -4,6 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"log"
+	"net/url"
+	"os"
+	"strconv"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -13,16 +19,11 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"io"
-	"log"
-	"net/url"
-	"os"
-	"strconv"
 )
 
 var (
 	bucketName      = ""
-	accountId       = ""
+	endpointUrl     = ""
 	accessKeyId     = ""
 	accessKeySecret = ""
 	publicBaseUrl   = ""
@@ -72,8 +73,7 @@ func deleteFile(client *s3.Client, key string) error {
 func main() {
 
 	bucketName = os.Getenv("bucketName")
-	accountId = os.Getenv("accountId")
-	accessKeyId = os.Getenv("accessKeyId")
+	endpointUrl = os.Getenv("endpointUrl")
 	accessKeySecret = os.Getenv("accessKeySecret")
 	publicBaseUrl = os.Getenv("publicBaseUrl")
 	quota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
@@ -89,14 +89,12 @@ func main() {
 	log.Println("bucketName: ", bucketName)
 	log.Println("quota: ", quota)
 
-	r2Resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
-		return aws.Endpoint{
-			URL: fmt.Sprintf("https://%s.r2.cloudflarestorage.com", accountId),
-		}, nil
+	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+		return aws.Endpoint{URL: endpointUrl}, nil
 	})
 
 	cfg, err := config.LoadDefaultConfig(context.TODO(),
-		config.WithEndpointResolverWithOptions(r2Resolver),
+		config.WithEndpointResolverWithOptions(resolver),
 		config.WithRegion("auto"),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyId, accessKeySecret, "")),
 	)
