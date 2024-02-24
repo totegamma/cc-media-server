@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/totegamma/concurrent/x/auth"
 	"github.com/totegamma/concurrent/x/core"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -117,6 +118,7 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
+	e.Use(auth.ReceiveGatewayAuthPropagation)
 
 	e.GET("/user", func(c echo.Context) error {
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
