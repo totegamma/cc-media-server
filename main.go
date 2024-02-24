@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"github.com/totegamma/concurrent/x/core"
 )
 
 var (
@@ -118,13 +119,13 @@ func main() {
 	e.Use(middleware.CORS())
 
 	e.GET("/user", func(c echo.Context) error {
-		userID := c.Request().Header.Get("cc-user-id")
-		if len(userID) != 42 {
+        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+        if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
 
 		var user StorageUser
-		err = db.Where("id = ?", userID).First(&user).Error
+		err = db.Where("id = ?", requester).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -136,13 +137,13 @@ func main() {
 	e.POST("/files", func(c echo.Context) error {
 		body := c.Request().Body
 
-		userID := c.Request().Header.Get("cc-user-id")
-		if len(userID) != 42 {
+        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+        if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
 
 		var user StorageUser
-		err = db.FirstOrCreate(&user, StorageUser{ID: userID}).Error
+		err = db.FirstOrCreate(&user, StorageUser{ID: requester}).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -161,7 +162,7 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "quota exceeded"})
 		}
 
-		fileID, err := uploadFile(client, userID, reader, size)
+		fileID, err := uploadFile(client, requester, reader, size)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -177,8 +178,8 @@ func main() {
 		var file StorageFile
 		err = db.FirstOrCreate(&file, StorageFile{
 			ID:      fileID,
-			URL:     publicBaseUrl + userID + "/" + fileID,
-			OwnerID: userID,
+			URL:     publicBaseUrl + requester + "/" + fileID,
+			OwnerID: requester,
 			Size:    size,
 		}).Error
 		if err != nil {
@@ -206,10 +207,12 @@ func main() {
 	})
 
 	e.DELETE("/file/:id", func(c echo.Context) error {
-		userID := c.Request().Header.Get("cc-user-id")
-		if len(userID) != 42 {
+
+        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+        if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
+
 
 		id := c.Param("id")
 
@@ -220,11 +223,11 @@ func main() {
 			return c.JSON(500, err)
 		}
 
-		if file.OwnerID != userID {
+		if file.OwnerID != requester {
 			return c.JSON(403, echo.Map{"error": "you are not owner"})
 		}
 
-		err = deleteFile(client, userID+"/"+id)
+		err = deleteFile(client, requester+"/"+id)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -237,7 +240,7 @@ func main() {
 		}
 
 		var user StorageUser
-		err = db.Where("id = ?", userID).First(&user).Error
+		err = db.Where("id = ?", requester).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
