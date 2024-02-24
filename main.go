@@ -17,9 +17,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/totegamma/concurrent/x/core"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"github.com/totegamma/concurrent/x/core"
 )
 
 var (
@@ -119,8 +119,8 @@ func main() {
 	e.Use(middleware.CORS())
 
 	e.GET("/user", func(c echo.Context) error {
-        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
-        if !ok {
+		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
 
@@ -137,8 +137,8 @@ func main() {
 	e.POST("/files", func(c echo.Context) error {
 		body := c.Request().Body
 
-        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
-        if !ok {
+		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
 
@@ -208,11 +208,10 @@ func main() {
 
 	e.DELETE("/file/:id", func(c echo.Context) error {
 
-        requester, ok := c.Get(core.RequesterIdCtxKey).(string)
-        if !ok {
+		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
 		}
-
 
 		id := c.Param("id")
 
