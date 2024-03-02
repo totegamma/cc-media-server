@@ -193,13 +193,13 @@ func main() {
 	})
 
 	e.GET("/files", func(c echo.Context) error {
-		userID := c.Request().Header.Get("cc-user-id")
-		if len(userID) != 42 {
-			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
+		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		if !ok {
+			return c.JSON(400, echo.Map{"error": "invalid -user-id"})
 		}
 
 		var files []StorageFile
-		err = db.Where("owner_id = ?", userID).Find(&files).Error
+		err = db.Where("owner_id = ?", requester).Find(&files).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
