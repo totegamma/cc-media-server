@@ -123,7 +123,7 @@ func main() {
 	e.GET("/user", func(c echo.Context) error {
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
-			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
+			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
 		var user StorageUser
@@ -141,7 +141,7 @@ func main() {
 
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
-			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
+			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
 		var user StorageUser
@@ -195,7 +195,7 @@ func main() {
 	e.GET("/files", func(c echo.Context) error {
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
-			return c.JSON(400, echo.Map{"error": "invalid -user-id"})
+			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
 		var files []StorageFile
@@ -212,7 +212,7 @@ func main() {
 
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
-			return c.JSON(400, echo.Map{"error": "invalid cc-user-id"})
+			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
 		id := c.Param("id")
