@@ -59,7 +59,7 @@ func stripExif(data *bytes.Reader) (*bytes.Reader, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := imaging.Encode(&buf, img, imaging.JPEG); err != nil {
+	if err := imaging.Encode(&buf, img, imaging.JPEG, imaging.JPEGQuality(75)); err != nil {
 		return nil, fmt.Errorf("failed to re-encode Exif-stripped JPEG image: %w", err)
 	}
 	return bytes.NewReader(buf.Bytes()), nil
