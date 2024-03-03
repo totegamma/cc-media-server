@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"time"
+    "encoding/json"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -36,6 +37,11 @@ var (
 	quota           = int64(0)
 	db_dsn          = ""
 )
+
+func DebugJson(v interface{}) {
+    b, _ := json.MarshalIndent(v, "", "  ")
+    log.Println(string(b))
+}
 
 func uploadFile(client *s3.Client, userID string, data io.Reader, length int64) (string, error) {
 
@@ -221,15 +227,18 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid after"})
 			}
 			after := time.Unix(afterInt, 0)
-			err = db.Where("owner_id = ? AND cdate > ?", requester, after).Order("cdate asc").Limit(limit + 1).Find(&files).Error
+			err = db.Where("owner_id = ? AND c_date > ?", requester, after).Order("c_date asc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
 			}
 
+            DebugJson(files)
+
 			next = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
 				prev = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+				files = files[:limit]
 			}
 
 			slices.Reverse(files)
@@ -240,43 +249,43 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid before"})
 			}
 			before := time.Unix(beforeInt, 0)
-			err = db.Where("owner_id = ? AND cdate < ?", requester, before).Order("cdate desc").Limit(limit + 1).Find(&files).Error
+			err = db.Where("owner_id = ? AND c_date < ?", requester, before).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
 			}
+
+            DebugJson(files)
 
 			prev = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
 				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+				files = files[:limit]
 			}
 
 		} else { // beforeのうち、最新のものを取得
-			err = db.Where("owner_id = ?", requester).Order("cdate desc").Limit(limit + 1).Find(&files).Error
+			err = db.Where("owner_id = ?", requester).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
 			}
 
+            DebugJson(files)
+
 			if len(files) > limit {
 				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+				files = files[:limit]
 			}
 		}
 
-		if len(files) > limit {
-			return c.JSON(200, FilesResponse{
-				Status:  "ok",
-				Content: files[:limit],
-				Next:    next,
-				Prev:    prev,
-				Limit:   limit,
-			})
-		} else {
-			return c.JSON(200, FilesResponse{
-				Status:  "ok",
-				Content: files,
-			})
-		}
+		return c.JSON(200, FilesResponse{
+			Status:  "ok",
+			Content: files,
+			Next:    next,
+			Prev:    prev,
+			Limit:   limit,
+		})
+
 	})
 
 	e.DELETE("/file/:id", func(c echo.Context) error {
