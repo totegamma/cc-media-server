@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -11,7 +12,6 @@ import (
 	"slices"
 	"strconv"
 	"time"
-    "encoding/json"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -39,8 +39,8 @@ var (
 )
 
 func DebugJson(v interface{}) {
-    b, _ := json.MarshalIndent(v, "", "  ")
-    log.Println(string(b))
+	b, _ := json.MarshalIndent(v, "", "  ")
+	log.Println(string(b))
 }
 
 func uploadFile(client *s3.Client, userID string, data io.Reader, length int64) (string, error) {
@@ -233,7 +233,7 @@ func main() {
 				return c.JSON(500, err)
 			}
 
-            DebugJson(files)
+			DebugJson(files)
 
 			next = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
@@ -255,7 +255,7 @@ func main() {
 				return c.JSON(500, err)
 			}
 
-            DebugJson(files)
+			DebugJson(files)
 
 			prev = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
@@ -270,7 +270,7 @@ func main() {
 				return c.JSON(500, err)
 			}
 
-            DebugJson(files)
+			DebugJson(files)
 
 			if len(files) > limit {
 				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
@@ -278,13 +278,17 @@ func main() {
 			}
 		}
 
-		return c.JSON(200, FilesResponse{
+		result := FilesResponse{
 			Status:  "ok",
 			Content: files,
 			Next:    next,
 			Prev:    prev,
 			Limit:   limit,
-		})
+		}
+
+		DebugJson(result)
+
+		return c.JSON(200, result)
 
 	})
 
