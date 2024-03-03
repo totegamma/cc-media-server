@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -37,11 +36,6 @@ var (
 	quota           = int64(0)
 	db_dsn          = ""
 )
-
-func DebugJson(v interface{}) {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	log.Println(string(b))
-}
 
 func uploadFile(client *s3.Client, userID string, data io.Reader, length int64) (string, error) {
 
@@ -233,8 +227,6 @@ func main() {
 				return c.JSON(500, err)
 			}
 
-			DebugJson(files)
-
 			next = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
 				prev = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
@@ -255,8 +247,6 @@ func main() {
 				return c.JSON(500, err)
 			}
 
-			DebugJson(files)
-
 			prev = strconv.FormatInt(files[0].CDate.Unix(), 10)
 			if len(files) > limit {
 				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
@@ -269,8 +259,6 @@ func main() {
 				log.Println(err)
 				return c.JSON(500, err)
 			}
-
-			DebugJson(files)
 
 			if len(files) > limit {
 				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
@@ -285,8 +273,6 @@ func main() {
 			Prev:    prev,
 			Limit:   limit,
 		}
-
-		DebugJson(result)
 
 		return c.JSON(200, result)
 
