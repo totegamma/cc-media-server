@@ -3,7 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"image"
+	_ "image/jpeg"
 	"io"
 	"log"
 	"net/url"
@@ -16,6 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -36,6 +40,29 @@ var (
 	quota           = int64(0)
 	db_dsn          = ""
 )
+
+func stripExif(data *bytes.Reader) (*bytes.Reader, error) {
+	_, _, err := image.DecodeConfig(data)
+	if err != nil {
+		if errors.Is(err, image.ErrFormat) {
+			// not a JPEG image, no need to strip EXIF
+			return data, nil
+		}
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	// this strips EXIF data away from the JPEG image
+	img, err := imaging.Decode(data, imaging.AutoOrientation(true))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := imaging.Encode(&buf, img, imaging.JPEG); err != nil {
+		return nil, fmt.Errorf("failed to re-encode Exif-stripped JPEG image: %w", err)
+	}
+	return bytes.NewReader(buf.Bytes()), nil
+}
 
 func uploadFile(client *s3.Client, userID string, data io.Reader, length int64) (string, error) {
 
@@ -159,8 +186,12 @@ func main() {
 			return c.JSON(500, err)
 		}
 
-		reader := bytes.NewReader(buf)
-		size := int64(len(buf))
+		reader, err := stripExif(bytes.NewReader(buf))
+		if err != nil {
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+		size := reader.Size()
 
 		if user.TotalBytes+size > quota {
 			return c.JSON(403, echo.Map{"error": "quota exceeded"})
