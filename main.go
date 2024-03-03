@@ -8,7 +8,9 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"slices"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -198,14 +200,83 @@ func main() {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
-		var files []StorageFile
-		err = db.Where("owner_id = ?", requester).Find(&files).Error
+		afterStr := c.QueryParam("after")
+		beforeStr := c.QueryParam("before")
+
+		limitStr := c.QueryParam("limit")
+		limit, err := strconv.Atoi(limitStr)
 		if err != nil {
-			log.Println(err)
-			return c.JSON(500, err)
+			limit = 20
+		}
+		if limit > 100 {
+			limit = 100
 		}
 
-		return c.JSON(200, files)
+		var files []StorageFile
+		var next string
+		var prev string
+		if afterStr != "" { // prev
+			afterInt, err := strconv.ParseInt(afterStr, 10, 64)
+			if err != nil {
+				return c.JSON(400, echo.Map{"error": "invalid after"})
+			}
+			after := time.Unix(afterInt, 0)
+			err = db.Where("owner_id = ? AND cdate > ?", requester, after).Order("cdate asc").Limit(limit + 1).Find(&files).Error
+			if err != nil {
+				log.Println(err)
+				return c.JSON(500, err)
+			}
+
+			next = strconv.FormatInt(files[0].CDate.Unix(), 10)
+			if len(files) > limit {
+				prev = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+			}
+
+			slices.Reverse(files)
+
+		} else if beforeStr != "" { // next
+			beforeInt, err := strconv.ParseInt(beforeStr, 10, 64)
+			if err != nil {
+				return c.JSON(400, echo.Map{"error": "invalid before"})
+			}
+			before := time.Unix(beforeInt, 0)
+			err = db.Where("owner_id = ? AND cdate < ?", requester, before).Order("cdate desc").Limit(limit + 1).Find(&files).Error
+			if err != nil {
+				log.Println(err)
+				return c.JSON(500, err)
+			}
+
+			prev = strconv.FormatInt(files[0].CDate.Unix(), 10)
+			if len(files) > limit {
+				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+			}
+
+		} else { // beforeのうち、最新のものを取得
+			err = db.Where("owner_id = ?", requester).Order("cdate desc").Limit(limit + 1).Find(&files).Error
+			if err != nil {
+				log.Println(err)
+				return c.JSON(500, err)
+			}
+
+			if len(files) > limit {
+				next = strconv.FormatInt(files[limit-2].CDate.Unix(), 10)
+			}
+		}
+
+		if len(files) > limit {
+			return c.JSON(200, FilesResponse{
+				Status:  "ok",
+				Content: files[:limit],
+				Next:    next,
+				Prev:    prev,
+				Limit:   limit,
+			})
+		} else {
+			return c.JSON(200, FilesResponse{
+				Status:  "ok",
+				Content: files,
+			})
+		}
 	})
 
 	e.DELETE("/file/:id", func(c echo.Context) error {

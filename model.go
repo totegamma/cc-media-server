@@ -18,3 +18,11 @@ type StorageFile struct {
 	Size    int64     `json:"size" gorm:"type:bigint"`
 	CDate   time.Time `json:"cdate" gorm:"->;<-:create;autoCreateTime"`
 }
+
+type FilesResponse struct {
+	Status  string        `json:"status"`
+	Content []StorageFile `json:"content"`
+	Limit   int           `json:"limit,omitempty"`
+	Next    string        `json:"next,omitempty"`
+	Prev    string        `json:"prev,omitempty"`
+}
