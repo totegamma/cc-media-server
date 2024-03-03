@@ -50,6 +50,7 @@ func stripExif(data *bytes.Reader) (*bytes.Reader, error) {
 		}
 		return nil, fmt.Errorf("failed to decode image: %w", err)
 	}
+	_, _ = data.Seek(0, io.SeekStart)
 
 	// this strips EXIF data away from the JPEG image
 	img, err := imaging.Decode(data, imaging.AutoOrientation(true))
