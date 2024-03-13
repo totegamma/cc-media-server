@@ -59,11 +59,9 @@ func deleteFile(ctx context.Context, client *s3.Client, key string) error {
 
 func stripExif(data *bytes.Reader) (*bytes.Reader, error) {
 	_, _, err := image.DecodeConfig(data)
+	defer data.Seek(0, io.SeekStart)
+
 	if err != nil {
-		_, err := data.Seek(0, io.SeekStart)
-		if err != nil {
-			return nil, err
-		}
 		if errors.Is(err, image.ErrFormat) {
 			// not a JPEG image, no need to strip EXIF
 			return data, nil
