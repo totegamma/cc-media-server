@@ -3,13 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
-	"image"
 	_ "image/jpeg"
 	"io"
 	"log"
-	"net/url"
 	"os"
 	"slices"
 	"strconv"
@@ -19,8 +15,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/disintegration/imaging"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/totegamma/concurrent/x/auth"
@@ -41,69 +35,6 @@ var (
 	db_dsn          = ""
 )
 
-func stripExif(data *bytes.Reader) (*bytes.Reader, error) {
-	_, _, err := image.DecodeConfig(data)
-	if err != nil {
-		if errors.Is(err, image.ErrFormat) {
-			// not a JPEG image, no need to strip EXIF
-			return data, nil
-		}
-		return nil, fmt.Errorf("failed to decode image: %w", err)
-	}
-	_, _ = data.Seek(0, io.SeekStart)
-
-	// this strips EXIF data away from the JPEG image
-	img, err := imaging.Decode(data, imaging.AutoOrientation(true))
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode image: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := imaging.Encode(&buf, img, imaging.JPEG, imaging.JPEGQuality(75)); err != nil {
-		return nil, fmt.Errorf("failed to re-encode Exif-stripped JPEG image: %w", err)
-	}
-	return bytes.NewReader(buf.Bytes()), nil
-}
-
-func uploadFile(client *s3.Client, userID string, data io.Reader, length int64) (string, error) {
-
-	id := uuid.New().String()
-	key := fmt.Sprintf("%s/%s", userID, id)
-
-	_, err := client.PutObject(context.TODO(), &s3.PutObjectInput{
-		Bucket:        &bucketName,
-		Key:           aws.String(key),
-		Body:          data,
-		ContentType:   aws.String("image/jpeg"),
-		ContentLength: aws.Int64(length),
-	})
-
-	if err != nil {
-		log.Println(err)
-		return "", err
-	}
-
-	log.Println("Uploaded to: ", publicBaseUrl+url.PathEscape(key))
-
-	return id, nil
-}
-
-func deleteFile(client *s3.Client, key string) error {
-	_, err := client.DeleteObject(context.TODO(), &s3.DeleteObjectInput{
-		Bucket: &bucketName,
-		Key:    aws.String(key),
-	})
-
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	log.Println("Deleted: ", key)
-
-	return nil
-}
-
 func main() {
 
 	bucketName = os.Getenv("bucketName")
@@ -121,7 +52,10 @@ func main() {
 		panic("failed to connect database")
 	}
 
-	db.AutoMigrate(&StorageUser{}, &StorageFile{})
+	err = db.AutoMigrate(&StorageUser{}, &StorageFile{})
+	if err != nil {
+		panic("failed to migrate database")
+	}
 
 	log.Println("bucketName: ", bucketName)
 	log.Println("quota: ", quota)
@@ -150,6 +84,7 @@ func main() {
 	e.Use(middleware.CORS())
 	e.Use(auth.ReceiveGatewayAuthPropagation)
 
+	// ユーザー情報の取得
 	e.GET("/user", func(c echo.Context) error {
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
@@ -166,10 +101,16 @@ func main() {
 		return c.JSON(200, user)
 	})
 
+	// ファイルのアップロード
 	e.POST("/files", func(c echo.Context) error {
+		ctx := c.Request().Context()
+
 		body := c.Request().Body
+		header := c.Request().Header
 
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		contentType := header.Get("Content-Type")
+
 		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
@@ -198,7 +139,7 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "quota exceeded"})
 		}
 
-		fileID, err := uploadFile(client, requester, reader, size)
+		fileID, err := uploadFile(ctx, client, requester, reader, size, contentType)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -226,6 +167,7 @@ func main() {
 		return c.JSON(200, echo.Map{"status": "ok", "content": file})
 	})
 
+	// ファイルの一覧取得
 	e.GET("/files", func(c echo.Context) error {
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
@@ -310,7 +252,9 @@ func main() {
 
 	})
 
+	// ファイルの削除
 	e.DELETE("/file/:id", func(c echo.Context) error {
+		ctx := c.Request().Context()
 
 		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
 		if !ok {
@@ -330,7 +274,7 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "you are not owner"})
 		}
 
-		err = deleteFile(client, requester+"/"+id)
+		err = deleteFile(ctx, client, requester+"/"+id)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -358,5 +302,5 @@ func main() {
 		return c.JSON(200, echo.Map{"status": "ok"})
 	})
 
-	e.Start(":8000")
+	panic(e.Start(":8000"))
 }
