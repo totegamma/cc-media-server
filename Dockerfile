@@ -6,7 +6,7 @@ RUN go mod download && go mod verify
 COPY ./ ./
 RUN go build -o mediaserver
 
-FROM golang:latest
+FROM ubuntu:latest
 
 COPY --from=coreBuilder /work/mediaserver /usr/local/bin
 
