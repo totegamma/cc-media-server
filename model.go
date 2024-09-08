@@ -16,6 +16,7 @@ type StorageFile struct {
 	URL     string    `json:"url" gorm:"type:text"`
 	OwnerID string    `json:"ownerId" gorm:"type:char(42)"`
 	Size    int64     `json:"size" gorm:"type:bigint"`
+	Mime    string    `json:"mime" gorm:"type:text"`
 	CDate   time.Time `json:"cdate" gorm:"->;<-:create;autoCreateTime"`
 }
 

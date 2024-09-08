@@ -38,11 +38,26 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Get tag
+        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ matrix.image }}
+          tags: |
+            type=raw,value=latest,enable=${{ !contains(env.TAG, 'beta') }}
+            type=semver,pattern={{raw}}
+
+      - name: Set platforms based on tag
+        id: set-platforms
+        run: |
+          if [[ "${{ env.TAG }}" == *"beta"* ]]; then
+            echo "PLATFORMS=linux/amd64" >> $GITHUB_ENV
+          else
+            echo "PLATFORMS=linux/amd64,linux/arm64,linux/arm64/v8" >> $GITHUB_ENV
+          fi
 
       - name: Build and push Docker image
         id: build-and-push
@@ -50,7 +65,7 @@ jobs:
         with:
           context: .
           push: ${{ github.event_name != 'pull_request' }}
-          platforms: linux/amd64,linux/arm64,linux/arm64/v8
+          platforms: ${{ env.PLATFORMS }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha

@@ -128,10 +128,13 @@ func main() {
 			return c.JSON(500, err)
 		}
 
-		reader, err := stripExif(bytes.NewReader(buf))
-		if err != nil {
-			log.Println(err)
-			return c.JSON(500, err)
+		reader := bytes.NewReader(buf)
+		if contentType == "image/jpeg" {
+			reader, err = stripExif(reader)
+			if err != nil {
+				log.Println(err)
+				return c.JSON(500, err)
+			}
 		}
 		size := reader.Size()
 
@@ -158,6 +161,7 @@ func main() {
 			URL:     publicBaseUrl + requester + "/" + fileID,
 			OwnerID: requester,
 			Size:    size,
+			Mime:    contentType,
 		}).Error
 		if err != nil {
 			log.Println(err)
