@@ -6,7 +6,6 @@ import (
 	_ "image/jpeg"
 	"io"
 	"log"
-	"mime"
 	"os"
 	"slices"
 	"strconv"
@@ -143,7 +142,7 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "quota exceeded"})
 		}
 
-		fileID, err := uploadFile(ctx, client, requester, reader, size, contentType)
+		fileID, extension, err := uploadFile(ctx, client, requester, reader, size, contentType)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -154,15 +153,6 @@ func main() {
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
-		}
-
-		extension := ""
-		extensions, err := mime.ExtensionsByType(contentType)
-		if err == nil {
-			extension = "." + extensions[0]
-			if extension == ".jpe" { // workaround for jpeg
-				extension = ".jpeg"
-			}
 		}
 
 		var file StorageFile

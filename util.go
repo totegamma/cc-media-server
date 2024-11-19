@@ -12,18 +12,29 @@ import (
 	"image"
 	"io"
 	"log"
+	"mime"
 	"net/url"
 )
 
-func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.Reader, length int64, contentType string) (string, error) {
+func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.Reader, length int64, contentType string) (string, string, error) {
 	id := uuid.New().String()
-	key := fmt.Sprintf("%s/%s", userID, id)
 
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	_, err := client.PutObject(ctx, &s3.PutObjectInput{
+	extension := ""
+	extensions, err := mime.ExtensionsByType(contentType)
+	if err == nil {
+		extension = extensions[0]
+		if extension == ".jpe" { // workaround for jpeg
+			extension = ".jpeg"
+		}
+	}
+
+	key := userID + "/" + id + extension
+
+	_, err = client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        &bucketName,
 		Key:           aws.String(key),
 		Body:          data,
@@ -33,12 +44,12 @@ func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.R
 
 	if err != nil {
 		log.Println(err)
-		return "", err
+		return "", "", err
 	}
 
 	log.Println("Uploaded to: ", publicBaseUrl+url.PathEscape(key))
 
-	return id, nil
+	return id, extension, nil
 }
 
 func deleteFile(ctx context.Context, client *s3.Client, key string) error {
