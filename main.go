@@ -6,6 +6,7 @@ import (
 	_ "image/jpeg"
 	"io"
 	"log"
+	"mime"
 	"os"
 	"slices"
 	"strconv"
@@ -155,10 +156,19 @@ func main() {
 			return c.JSON(500, err)
 		}
 
+		extension := ""
+		extensions, err := mime.ExtensionsByType(contentType)
+		if err == nil {
+			extension = "." + extensions[0]
+			if extension == ".jpe" { // workaround for jpeg
+				extension = ".jpeg"
+			}
+		}
+
 		var file StorageFile
 		err = db.FirstOrCreate(&file, StorageFile{
 			ID:      fileID,
-			URL:     publicBaseUrl + requester + "/" + fileID,
+			URL:     publicBaseUrl + requester + "/" + fileID + extension,
 			OwnerID: requester,
 			Size:    size,
 			Mime:    contentType,
