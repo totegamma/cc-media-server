@@ -25,11 +25,8 @@ func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.R
 
 	extension := ""
 	extensions, err := mime.ExtensionsByType(contentType)
-	if err == nil {
-		extension = extensions[0]
-		if extension == ".jpe" { // workaround for jpeg
-			extension = ".jpeg"
-		}
+	if err == nil && len(extensions) > 0 {
+		extension = extensions[len(extensions)-1]
 	}
 
 	key := userID + "/" + id + extension
