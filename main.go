@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -278,7 +279,8 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "you are not owner"})
 		}
 
-		err = deleteFile(ctx, client, requester+"/"+id)
+		key := strings.TrimPrefix(file.URL, publicBaseUrl)
+		err = deleteFile(ctx, client, key)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
