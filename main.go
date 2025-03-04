@@ -19,8 +19,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/totegamma/concurrent/core"
 	"github.com/totegamma/concurrent/x/auth"
-	"github.com/totegamma/concurrent/x/core"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
