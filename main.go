@@ -6,6 +6,7 @@ import (
 	_ "image/jpeg"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"slices"
 	"strconv"
@@ -34,6 +35,13 @@ var (
 	forcePathStyle  = bool(false)
 	quota           = int64(0)
 	db_dsn          = ""
+)
+
+var (
+	version      = "unknown"
+	buildMachine = "unknown"
+	buildTime    = "unknown"
+	goVersion    = "unknown"
 )
 
 func main() {
@@ -84,6 +92,13 @@ func main() {
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
 	e.Use(auth.ReceiveGatewayAuthPropagation)
+
+	e.GET("/cc-info", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, core.CCInfo{
+			Name:    "github.com/totegamma/cc-media-server",
+			Version: version,
+		})
+	})
 
 	// ユーザー情報の取得
 	e.GET("/user", func(c echo.Context) error {
