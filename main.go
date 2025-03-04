@@ -102,13 +102,14 @@ func main() {
 
 	// ユーザー情報の取得
 	e.GET("/user", func(c echo.Context) error {
-		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		ctx := c.Request().Context()
+		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
 		var user StorageUser
-		err = db.Where("id = ?", requester).First(&user).Error
+		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -124,7 +125,7 @@ func main() {
 		body := c.Request().Body
 		header := c.Request().Header
 
-		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 		contentType := header.Get("Content-Type")
 
 		if !ok {
@@ -132,7 +133,7 @@ func main() {
 		}
 
 		var user StorageUser
-		err = db.FirstOrCreate(&user, StorageUser{ID: requester}).Error
+		err = db.WithContext(ctx).FirstOrCreate(&user, StorageUser{ID: requester}).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -189,7 +190,8 @@ func main() {
 
 	// ファイルの一覧取得
 	e.GET("/files", func(c echo.Context) error {
-		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		ctx := c.Request().Context()
+		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
@@ -275,8 +277,7 @@ func main() {
 	// ファイルの削除
 	e.DELETE("/file/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
-
-		requester, ok := c.Get(core.RequesterIdCtxKey).(string)
+		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
 		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
