@@ -146,13 +146,6 @@ func main() {
 		}
 
 		reader := bytes.NewReader(buf)
-		if contentType == "image/jpeg" {
-			reader, err = stripExif(reader)
-			if err != nil {
-				log.Println(err)
-				return c.JSON(500, err)
-			}
-		}
 		size := reader.Size()
 
 		if user.TotalBytes+size > quota {
