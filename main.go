@@ -117,7 +117,7 @@ func main() {
 
 		user.Quota = quota
 
-		return c.JSON(200, user)
+		return c.JSON(200, echo.Map{"status": "ok", "content": user})
 	})
 
 	// ファイルのアップロード
