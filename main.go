@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	_ "image/jpeg"
 	"io"
 	"log"
 	"net/http"
@@ -109,10 +108,9 @@ func main() {
 		}
 
 		quota := defaultQuota
-		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(string)
+		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
 		if ok {
-			tags := core.ParseTags(requesterTag)
-			value, ok := tags.GetAsInt("mediaServerQuota")
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
 			if ok {
 				quota = int64(value)
 			}
@@ -145,10 +143,9 @@ func main() {
 		}
 
 		quota := defaultQuota
-		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(string)
+		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
 		if ok {
-			tags := core.ParseTags(requesterTag)
-			value, ok := tags.GetAsInt("mediaServerQuota")
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
 			if ok {
 				quota = int64(value)
 			}
