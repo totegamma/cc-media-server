@@ -33,7 +33,7 @@ var (
 	accessKeySecret = ""
 	publicBaseUrl   = ""
 	forcePathStyle  = bool(false)
-	quota           = int64(0)
+	defaultQuota    = int64(0)
 	db_dsn          = ""
 )
 
@@ -53,7 +53,7 @@ func main() {
 	accessKeySecret = os.Getenv("accessKeySecret")
 	publicBaseUrl = os.Getenv("publicBaseUrl")
 	forcePathStyle, _ = strconv.ParseBool(os.Getenv("forcePathStyle"))
-	quota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
+	defaultQuota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
 	db_dsn = os.Getenv("db_dsn")
 
 	db, err := gorm.Open(postgres.Open(db_dsn), &gorm.Config{})
@@ -67,9 +67,9 @@ func main() {
 	}
 
 	log.Println("bucketName: ", bucketName)
-	log.Println("quota: ", quota)
+	log.Println("defaultQuota: ", defaultQuota)
 
-	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+	resolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...any) (aws.Endpoint, error) {
 		return aws.Endpoint{URL: endpointUrl}, nil
 	})
 
@@ -108,6 +108,16 @@ func main() {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
+		quota := defaultQuota
+		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(string)
+		if ok {
+			tags := core.ParseTags(requesterTag)
+			value, ok := tags.GetAsInt("mediaServerQuota")
+			if ok {
+				quota = int64(value)
+			}
+		}
+
 		var user StorageUser
 		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
 		if err != nil {
@@ -132,6 +142,16 @@ func main() {
 
 		if !ok {
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
+		}
+
+		quota := defaultQuota
+		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(string)
+		if ok {
+			tags := core.ParseTags(requesterTag)
+			value, ok := tags.GetAsInt("mediaServerQuota")
+			if ok {
+				quota = int64(value)
+			}
 		}
 
 		var user StorageUser
