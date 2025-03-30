@@ -7,6 +7,7 @@ import (
 type StorageUser struct {
 	ID         string    `json:"id" gorm:"primaryKey;type:char(42)"`
 	TotalBytes int64     `json:"totalBytes" gorm:"type:bigint"`
+	Quota      int64     `json:"quota" gorm:"-"`
 	CDate      time.Time `json:"cdate" gorm:"->;<-:create;autoCreateTime"`
 	MDate      time.Time `json:"mdate" gorm:"autoUpdateTime"`
 }

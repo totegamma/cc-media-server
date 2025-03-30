@@ -115,6 +115,8 @@ func main() {
 			return c.JSON(500, err)
 		}
 
+		user.Quota = quota
+
 		return c.JSON(200, user)
 	})
 
