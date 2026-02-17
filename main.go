@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -21,12 +23,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/concrnt/concrnt/core"
-	"github.com/concrnt/concrnt/x/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	"github.com/totegamma/concrnt-playground"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -51,7 +53,21 @@ var (
 	goVersion    = "unknown"
 )
 
+type ConcrntEndpoint struct {
+	Template string    `json:"template"`
+	Method   string    `json:"method"`
+	Query    *[]string `json:"query,omitempty"`
+}
+
+type CCInfo struct {
+	Name      string                     `json:"name"`
+	Version   string                     `json:"version"`
+	Endpoints map[string]ConcrntEndpoint `json:"endpoints"`
+}
+
 func main() {
+
+	fmt.Printf("cc-media-server version: %s, buildMachine: %s, buildTime: %s, goVersion: %s\n", version, buildMachine, buildTime, goVersion)
 
 	bucketName = os.Getenv("bucketName")
 	endpointUrl = os.Getenv("endpointUrl")
@@ -100,31 +116,38 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
-	e.Use(auth.ReceiveGatewayAuthPropagation)
 
 	e.GET("/cc-info", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, core.CCInfo{
+		return c.JSON(http.StatusOK, CCInfo{
 			Name:    "github.com/totegamma/cc-media-server",
 			Version: version,
+			Endpoints: map[string]ConcrntEndpoint{
+				"net.concrnt.files.user":    {Template: "/user", Method: http.MethodGet},
+				"net.concrnt.files.upload":  {Template: "/files", Method: http.MethodPost},
+				"net.concrnt.files.presign": {Template: "/presign", Method: http.MethodPost},
+				"net.concrnt.files.list":    {Template: "/files", Method: http.MethodGet, Query: &[]string{"after", "before", "limit"}},
+				"net.concrnt.files.delete":  {Template: "/file/{id}", Method: http.MethodDelete},
+			},
 		})
 	})
 
 	// ユーザー情報の取得
 	e.GET("/user", func(c echo.Context) error {
 		ctx := c.Request().Context()
-		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-		if !ok {
+
+		header := c.Request().Header
+
+		requesterHeader := header.Get("cc-requester")
+		var requesterEntity concrnt.Entity
+		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
+		if err != nil {
+			log.Println(err)
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
 
+		requester := requesterEntity.CCID
+
 		quota := defaultQuota
-		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
-		if ok {
-			value, ok := requesterTag.GetAsInt("mediaServerQuota")
-			if ok {
-				quota = int64(value)
-			}
-		}
 
 		var user StorageUser
 		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
@@ -145,21 +168,27 @@ func main() {
 		body := c.Request().Body
 		header := c.Request().Header
 
-		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-		contentType := header.Get("Content-Type")
-
-		if !ok {
+		requesterHeader := header.Get("cc-requester")
+		var requesterEntity concrnt.Entity
+		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
+		if err != nil {
+			log.Println(err)
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
+		requester := requesterEntity.CCID
+
+		contentType := header.Get("Content-Type")
 
 		quota := defaultQuota
-		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
-		if ok {
-			value, ok := requesterTag.GetAsInt("mediaServerQuota")
+		/*
+			requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
 			if ok {
-				quota = int64(value)
+				value, ok := requesterTag.GetAsInt("mediaServerQuota")
+				if ok {
+					quota = int64(value)
+				}
 			}
-		}
+		*/
 
 		var user StorageUser
 		err = db.WithContext(ctx).FirstOrCreate(&user, StorageUser{ID: requester}).Error
@@ -216,19 +245,28 @@ func main() {
 	// 署名付きURLの発行
 	e.POST("/presign", func(c echo.Context) error {
 		ctx := c.Request().Context()
-		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-		if !ok {
+
+		header := c.Request().Header
+
+		requesterHeader := header.Get("cc-requester")
+		var requesterEntity concrnt.Entity
+		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
+		if err != nil {
+			log.Println(err)
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
+		requester := requesterEntity.CCID
 
 		quota := defaultQuota
-		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
-		if ok {
-			value, ok := requesterTag.GetAsInt("mediaServerQuota")
+		/*
+			requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
 			if ok {
-				quota = int64(value)
+				value, ok := requesterTag.GetAsInt("mediaServerQuota")
+				if ok {
+					quota = int64(value)
+				}
 			}
-		}
+		*/
 
 		var req struct {
 			ContentType string `json:"contentType"`
@@ -333,10 +371,16 @@ func main() {
 	// ファイルの一覧取得
 	e.GET("/files", func(c echo.Context) error {
 		ctx := c.Request().Context()
-		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-		if !ok {
+		header := c.Request().Header
+
+		requesterHeader := header.Get("cc-requester")
+		var requesterEntity concrnt.Entity
+		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
+		if err != nil {
+			log.Println(err)
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
+		requester := requesterEntity.CCID
 
 		afterStr := c.QueryParam("after")
 		beforeStr := c.QueryParam("before")
@@ -359,7 +403,7 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid after"})
 			}
 			after := time.Unix(afterInt, 0)
-			err = db.Where("owner_id = ? AND c_date > ?", requester, after).Order("c_date asc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ? AND c_date > ?", requester, after).Order("c_date asc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -379,7 +423,7 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid before"})
 			}
 			before := time.Unix(beforeInt, 0)
-			err = db.Where("owner_id = ? AND c_date < ?", requester, before).Order("c_date desc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ? AND c_date < ?", requester, before).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -392,7 +436,7 @@ func main() {
 			}
 
 		} else { // beforeのうち、最新のものを取得
-			err = db.Where("owner_id = ?", requester).Order("c_date desc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ?", requester).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -419,15 +463,22 @@ func main() {
 	// ファイルの削除
 	e.DELETE("/file/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
-		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
-		if !ok {
+
+		header := c.Request().Header
+
+		requesterHeader := header.Get("cc-requester")
+		var requesterEntity concrnt.Entity
+		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
+		if err != nil {
+			log.Println(err)
 			return c.JSON(400, echo.Map{"error": "invalid requester"})
 		}
+		requester := requesterEntity.CCID
 
 		id := c.Param("id")
 
 		var file StorageFile
-		err = db.Where("id = ?", id).First(&file).Error
+		err = db.WithContext(ctx).Where("id = ?", id).First(&file).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -444,20 +495,20 @@ func main() {
 			return c.JSON(500, err)
 		}
 
-		err = db.Delete(&file).Error
+		err = db.WithContext(ctx).Delete(&file).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
 		}
 
 		var user StorageUser
-		err = db.Where("id = ?", requester).First(&user).Error
+		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
 		}
 		user.TotalBytes -= file.Size
-		err = db.Save(&user).Error
+		err = db.WithContext(ctx).Save(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -467,10 +518,11 @@ func main() {
 	})
 
 	e.GET("/resolve/:hash", func(c echo.Context) error {
+		ctx := c.Request().Context()
 		hash := c.Param("hash")
 
 		var file StorageFile
-		err = db.Where("sha256 = ?", hash).First(&file).Error
+		err = db.WithContext(ctx).Where("sha256 = ?", hash).First(&file).Error
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return c.JSON(404, echo.Map{"error": "file not found"})
