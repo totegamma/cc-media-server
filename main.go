@@ -122,11 +122,12 @@ func main() {
 			Name:    "github.com/totegamma/cc-media-server",
 			Version: version,
 			Endpoints: map[string]ConcrntEndpoint{
-				"net.concrnt.files.user":    {Template: "/user", Method: http.MethodGet},
-				"net.concrnt.files.upload":  {Template: "/files", Method: http.MethodPost},
-				"net.concrnt.files.presign": {Template: "/presign", Method: http.MethodPost},
-				"net.concrnt.files.list":    {Template: "/files", Method: http.MethodGet, Query: &[]string{"after", "before", "limit"}},
-				"net.concrnt.files.delete":  {Template: "/file/{id}", Method: http.MethodDelete},
+				"net.concrnt.storage.user":    {Template: "/user", Method: http.MethodGet},
+				"net.concrnt.storage.upload":  {Template: "/files", Method: http.MethodPost},
+				"net.concrnt.storage.presign": {Template: "/presign", Method: http.MethodPost},
+				"net.concrnt.storage.list":    {Template: "/files", Method: http.MethodGet, Query: &[]string{"after", "before", "limit"}},
+				"net.concrnt.storage.delete":  {Template: "/file/{id}", Method: http.MethodDelete},
+				"net.concrnt.storage.resolve": {Template: "/resolve/{hash}", Method: http.MethodGet},
 			},
 		})
 	})
