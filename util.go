@@ -11,22 +11,35 @@ import (
 	"net/url"
 )
 
-func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.Reader, length int64, contentType string) (string, string, error) {
-	id := uuid.New().String()
+func extensionFromContentType(contentType string) string {
+	if contentType == "" {
+		return ""
+	}
 
+	extensions, err := mime.ExtensionsByType(contentType)
+	if err == nil && len(extensions) > 0 {
+		return extensions[len(extensions)-1]
+	}
+
+	return ""
+}
+
+func makeObjectKey(userID string, contentType string) (string, string, string) {
+	id := uuid.New().String()
+	extension := extensionFromContentType(contentType)
+	key := userID + "/" + id + extension
+
+	return id, extension, key
+}
+
+func uploadFile(ctx context.Context, client *s3.Client, userID string, data io.Reader, length int64, contentType string) (string, string, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
 
-	extension := ""
-	extensions, err := mime.ExtensionsByType(contentType)
-	if err == nil && len(extensions) > 0 {
-		extension = extensions[len(extensions)-1]
-	}
+	id, extension, key := makeObjectKey(userID, contentType)
 
-	key := userID + "/" + id + extension
-
-	_, err = client.PutObject(ctx, &s3.PutObjectInput{
+	_, err := client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        &bucketName,
 		Key:           aws.String(key),
 		Body:          data,

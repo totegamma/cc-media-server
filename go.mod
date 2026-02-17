@@ -9,6 +9,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.43.0
 	github.com/concrnt/concrnt v1.7.4
 	github.com/google/uuid v1.6.0
+	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.12.0
 	gorm.io/driver/postgres v1.5.9
 	gorm.io/gorm v1.25.11

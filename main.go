@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,12 +20,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/concrnt/concrnt/core"
 	"github.com/concrnt/concrnt/x/auth"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+
+	_ "github.com/joho/godotenv/autoload"
 )
 
 var (
@@ -34,6 +41,7 @@ var (
 	forcePathStyle  = bool(false)
 	defaultQuota    = int64(0)
 	db_dsn          = ""
+	port            = ""
 )
 
 var (
@@ -54,6 +62,7 @@ func main() {
 	forcePathStyle, _ = strconv.ParseBool(os.Getenv("forcePathStyle"))
 	defaultQuota, _ = strconv.ParseInt(os.Getenv("quota"), 10, 64)
 	db_dsn = os.Getenv("db_dsn")
+	port = os.Getenv("port")
 
 	db, err := gorm.Open(postgres.Open(db_dsn), &gorm.Config{})
 	if err != nil {
@@ -85,6 +94,7 @@ func main() {
 	client := s3.NewFromConfig(cfg, func(options *s3.Options) {
 		options.UsePathStyle = forcePathStyle
 	})
+	presignClient := s3.NewPresignClient(client)
 
 	e := echo.New()
 	e.Use(middleware.Logger())
@@ -164,6 +174,8 @@ func main() {
 			return c.JSON(500, err)
 		}
 
+		hash := sha256.Sum256(buf)
+
 		reader := bytes.NewReader(buf)
 		size := reader.Size()
 
@@ -187,7 +199,8 @@ func main() {
 		var file StorageFile
 		err = db.FirstOrCreate(&file, StorageFile{
 			ID:      fileID,
-			URL:     publicBaseUrl + requester + "/" + fileID + extension,
+			Sha256:  hex.EncodeToString(hash[:]),
+			URL:     path.Join(publicBaseUrl, requester, fileID+extension),
 			OwnerID: requester,
 			Size:    size,
 			Mime:    contentType,
@@ -198,6 +211,123 @@ func main() {
 		}
 
 		return c.JSON(200, echo.Map{"status": "ok", "content": file})
+	})
+
+	// 署名付きURLの発行
+	e.POST("/presign", func(c echo.Context) error {
+		ctx := c.Request().Context()
+		requester, ok := ctx.Value(core.RequesterIdCtxKey).(string)
+		if !ok {
+			return c.JSON(400, echo.Map{"error": "invalid requester"})
+		}
+
+		quota := defaultQuota
+		requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
+		if ok {
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
+			if ok {
+				quota = int64(value)
+			}
+		}
+
+		var req struct {
+			ContentType string `json:"contentType"`
+			Size        int64  `json:"size"`
+			Sha256      string `json:"sha256"`
+		}
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(400, echo.Map{"error": "invalid request body"})
+		}
+
+		if req.Size <= 0 {
+			return c.JSON(400, echo.Map{"error": "size must be greater than 0"})
+		}
+
+		if req.Sha256 == "" {
+			return c.JSON(400, echo.Map{"error": "sha256 is required"})
+		}
+
+		if req.ContentType == "" {
+			req.ContentType = "application/octet-stream"
+		}
+
+		fileID, extension, key := makeObjectKey(requester, req.ContentType)
+
+		expiresIn := 10 * time.Minute
+		presigned, err := presignClient.PresignPutObject(
+			ctx,
+			&s3.PutObjectInput{
+				Bucket:            &bucketName,
+				Key:               aws.String(key),
+				ContentType:       aws.String(req.ContentType),
+				ContentLength:     aws.Int64(req.Size),
+				ChecksumAlgorithm: types.ChecksumAlgorithmSha256,
+				ChecksumSHA256:    aws.String(req.Sha256),
+			},
+			s3.WithPresignExpires(expiresIn),
+		)
+		if err != nil {
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+
+		headers := map[string]string{}
+		for k, values := range presigned.SignedHeader {
+			if len(values) > 0 {
+				headers[k] = values[0]
+			}
+		}
+
+		var file StorageFile
+		err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			var user StorageUser
+			if err := tx.FirstOrCreate(&user, StorageUser{ID: requester}).Error; err != nil {
+				return err
+			}
+
+			if user.TotalBytes+req.Size > quota {
+				return echo.NewHTTPError(403, "quota exceeded")
+			}
+
+			user.TotalBytes += req.Size
+			if err := tx.Save(&user).Error; err != nil {
+				return err
+			}
+
+			file = StorageFile{
+				ID:      fileID,
+				Sha256:  req.Sha256,
+				URL:     publicBaseUrl + requester + "/" + fileID + extension,
+				OwnerID: requester,
+				Size:    req.Size,
+				Mime:    req.ContentType,
+			}
+			if err := tx.Create(&file).Error; err != nil {
+				return err
+			}
+
+			return nil
+		})
+		if err != nil {
+			var httpErr *echo.HTTPError
+			if errors.As(err, &httpErr) {
+				return c.JSON(httpErr.Code, echo.Map{"error": httpErr.Message})
+			}
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+
+		return c.JSON(200, echo.Map{
+			"status": "ok",
+			"content": echo.Map{
+				"file":      file,
+				"key":       key,
+				"url":       presigned.URL,
+				"method":    http.MethodPut,
+				"headers":   headers,
+				"expiresIn": int(expiresIn.Seconds()),
+			},
+		})
 	})
 
 	// ファイルの一覧取得
@@ -336,5 +466,27 @@ func main() {
 		return c.JSON(200, echo.Map{"status": "ok"})
 	})
 
-	panic(e.Start(":8000"))
+	e.GET("/resolve/:hash", func(c echo.Context) error {
+		hash := c.Param("hash")
+
+		var file StorageFile
+		err = db.Where("sha256 = ?", hash).First(&file).Error
+		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return c.JSON(404, echo.Map{"error": "file not found"})
+			}
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+
+		c.Response().Header().Set("Location", file.URL)
+		return c.JSON(301, echo.Map{"status": "ok", "content": file})
+	})
+
+	portStr := ":8000"
+	if port != "" {
+		portStr = ":" + port
+	}
+
+	panic(e.Start(portStr))
 }
