@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +28,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/totegamma/concrnt-playground"
+	"github.com/totegamma/concrnt-playground/impl/interop"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -52,18 +52,6 @@ var (
 	buildTime    = "unknown"
 	goVersion    = "unknown"
 )
-
-type ConcrntEndpoint struct {
-	Template string    `json:"template"`
-	Method   string    `json:"method"`
-	Query    *[]string `json:"query,omitempty"`
-}
-
-type CCInfo struct {
-	Name      string                     `json:"name"`
-	Version   string                     `json:"version"`
-	Endpoints map[string]ConcrntEndpoint `json:"endpoints"`
-}
 
 func main() {
 
@@ -116,12 +104,13 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORS())
+	e.Use(interop.ReceiveGatewayAuthPropagation)
 
 	e.GET("/cc-info", func(c echo.Context) error {
-		return c.JSON(http.StatusOK, CCInfo{
+		return c.JSON(http.StatusOK, interop.CCInfo{
 			Name:    "github.com/totegamma/cc-media-server",
 			Version: version,
-			Endpoints: map[string]ConcrntEndpoint{
+			Endpoints: map[string]concrnt.ConcrntEndpoint{
 				"net.concrnt.storage.user":    {Template: "/user", Method: http.MethodGet},
 				"net.concrnt.storage.upload":  {Template: "/files", Method: http.MethodPost},
 				"net.concrnt.storage.presign": {Template: "/presign", Method: http.MethodPost},
@@ -136,22 +125,12 @@ func main() {
 	e.GET("/user", func(c echo.Context) error {
 		ctx := c.Request().Context()
 
-		header := c.Request().Header
-
-		requesterHeader := header.Get("cc-requester")
-		var requesterEntity concrnt.Entity
-		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
-		if err != nil {
-			log.Println(err)
-			return c.JSON(400, echo.Map{"error": "invalid requester"})
-		}
-
-		requester := requesterEntity.CCID
+		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		quota := defaultQuota
 
 		var user StorageUser
-		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
+		err = db.WithContext(ctx).Where("id = ?", requester.CCID).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -169,14 +148,7 @@ func main() {
 		body := c.Request().Body
 		header := c.Request().Header
 
-		requesterHeader := header.Get("cc-requester")
-		var requesterEntity concrnt.Entity
-		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
-		if err != nil {
-			log.Println(err)
-			return c.JSON(400, echo.Map{"error": "invalid requester"})
-		}
-		requester := requesterEntity.CCID
+		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		contentType := header.Get("Content-Type")
 
@@ -192,7 +164,7 @@ func main() {
 		*/
 
 		var user StorageUser
-		err = db.WithContext(ctx).FirstOrCreate(&user, StorageUser{ID: requester}).Error
+		err = db.WithContext(ctx).FirstOrCreate(&user, StorageUser{ID: requester.CCID}).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -213,7 +185,7 @@ func main() {
 			return c.JSON(403, echo.Map{"error": "quota exceeded"})
 		}
 
-		fileID, extension, err := uploadFile(ctx, client, requester, reader, size, contentType)
+		fileID, extension, err := uploadFile(ctx, client, requester.CCID, reader, size, contentType)
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
@@ -230,8 +202,8 @@ func main() {
 		err = db.FirstOrCreate(&file, StorageFile{
 			ID:      fileID,
 			Sha256:  hex.EncodeToString(hash[:]),
-			URL:     path.Join(publicBaseUrl, requester, fileID+extension),
-			OwnerID: requester,
+			URL:     path.Join(publicBaseUrl, requester.CCID, fileID+extension),
+			OwnerID: requester.CCID,
 			Size:    size,
 			Mime:    contentType,
 		}).Error
@@ -247,16 +219,7 @@ func main() {
 	e.POST("/presign", func(c echo.Context) error {
 		ctx := c.Request().Context()
 
-		header := c.Request().Header
-
-		requesterHeader := header.Get("cc-requester")
-		var requesterEntity concrnt.Entity
-		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
-		if err != nil {
-			log.Println(err)
-			return c.JSON(400, echo.Map{"error": "invalid requester"})
-		}
-		requester := requesterEntity.CCID
+		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		quota := defaultQuota
 		/*
@@ -290,7 +253,7 @@ func main() {
 			req.ContentType = "application/octet-stream"
 		}
 
-		fileID, extension, key := makeObjectKey(requester, req.ContentType)
+		fileID, extension, key := makeObjectKey(requester.CCID, req.ContentType)
 
 		expiresIn := 10 * time.Minute
 		presigned, err := presignClient.PresignPutObject(
@@ -320,7 +283,7 @@ func main() {
 		var file StorageFile
 		err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			var user StorageUser
-			if err := tx.FirstOrCreate(&user, StorageUser{ID: requester}).Error; err != nil {
+			if err := tx.FirstOrCreate(&user, StorageUser{ID: requester.CCID}).Error; err != nil {
 				return err
 			}
 
@@ -336,8 +299,8 @@ func main() {
 			file = StorageFile{
 				ID:      fileID,
 				Sha256:  req.Sha256,
-				URL:     publicBaseUrl + requester + "/" + fileID + extension,
-				OwnerID: requester,
+				URL:     publicBaseUrl + requester.CCID + "/" + fileID + extension,
+				OwnerID: requester.CCID,
 				Size:    req.Size,
 				Mime:    req.ContentType,
 			}
@@ -372,16 +335,8 @@ func main() {
 	// ファイルの一覧取得
 	e.GET("/files", func(c echo.Context) error {
 		ctx := c.Request().Context()
-		header := c.Request().Header
 
-		requesterHeader := header.Get("cc-requester")
-		var requesterEntity concrnt.Entity
-		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
-		if err != nil {
-			log.Println(err)
-			return c.JSON(400, echo.Map{"error": "invalid requester"})
-		}
-		requester := requesterEntity.CCID
+		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		afterStr := c.QueryParam("after")
 		beforeStr := c.QueryParam("before")
@@ -404,7 +359,7 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid after"})
 			}
 			after := time.Unix(afterInt, 0)
-			err = db.WithContext(ctx).Where("owner_id = ? AND c_date > ?", requester, after).Order("c_date asc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ? AND c_date > ?", requester.CCID, after).Order("c_date asc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -424,7 +379,7 @@ func main() {
 				return c.JSON(400, echo.Map{"error": "invalid before"})
 			}
 			before := time.Unix(beforeInt, 0)
-			err = db.WithContext(ctx).Where("owner_id = ? AND c_date < ?", requester, before).Order("c_date desc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ? AND c_date < ?", requester.CCID, before).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -437,7 +392,7 @@ func main() {
 			}
 
 		} else { // beforeのうち、最新のものを取得
-			err = db.WithContext(ctx).Where("owner_id = ?", requester).Order("c_date desc").Limit(limit + 1).Find(&files).Error
+			err = db.WithContext(ctx).Where("owner_id = ?", requester.CCID).Order("c_date desc").Limit(limit + 1).Find(&files).Error
 			if err != nil {
 				log.Println(err)
 				return c.JSON(500, err)
@@ -465,16 +420,7 @@ func main() {
 	e.DELETE("/file/:id", func(c echo.Context) error {
 		ctx := c.Request().Context()
 
-		header := c.Request().Header
-
-		requesterHeader := header.Get("cc-requester")
-		var requesterEntity concrnt.Entity
-		err := json.Unmarshal([]byte(requesterHeader), &requesterEntity)
-		if err != nil {
-			log.Println(err)
-			return c.JSON(400, echo.Map{"error": "invalid requester"})
-		}
-		requester := requesterEntity.CCID
+		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		id := c.Param("id")
 
@@ -485,7 +431,7 @@ func main() {
 			return c.JSON(500, err)
 		}
 
-		if file.OwnerID != requester {
+		if file.OwnerID != requester.CCID {
 			return c.JSON(403, echo.Map{"error": "you are not owner"})
 		}
 
@@ -503,7 +449,7 @@ func main() {
 		}
 
 		var user StorageUser
-		err = db.WithContext(ctx).Where("id = ?", requester).First(&user).Error
+		err = db.WithContext(ctx).Where("id = ?", requester.CCID).First(&user).Error
 		if err != nil {
 			log.Println(err)
 			return c.JSON(500, err)
