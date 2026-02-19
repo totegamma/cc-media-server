@@ -29,6 +29,7 @@ import (
 
 	"github.com/totegamma/concrnt-playground"
 	"github.com/totegamma/concrnt-playground/impl/interop"
+	"github.com/totegamma/concrnt-playground/impl/tags"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -128,6 +129,14 @@ func main() {
 		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		quota := defaultQuota
+		requesterTag, ok := ctx.Value(interop.RequesterTagCtxKey).(tags.Tags)
+		if ok {
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
+			if ok {
+				quota = int64(value)
+			}
+		}
+
 
 		var user StorageUser
 		err = db.WithContext(ctx).Where("id = ?", requester.CCID).First(&user).Error
@@ -153,15 +162,13 @@ func main() {
 		contentType := header.Get("Content-Type")
 
 		quota := defaultQuota
-		/*
-			requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
+		requesterTag, ok := ctx.Value(interop.RequesterTagCtxKey).(tags.Tags)
+		if ok {
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
 			if ok {
-				value, ok := requesterTag.GetAsInt("mediaServerQuota")
-				if ok {
-					quota = int64(value)
-				}
+				quota = int64(value)
 			}
-		*/
+		}
 
 		var user StorageUser
 		err = db.WithContext(ctx).FirstOrCreate(&user, StorageUser{ID: requester.CCID}).Error
@@ -222,15 +229,13 @@ func main() {
 		requester := ctx.Value(interop.RequesterCtxKey).(concrnt.Entity)
 
 		quota := defaultQuota
-		/*
-			requesterTag, ok := ctx.Value(core.RequesterTagCtxKey).(core.Tags)
+		requesterTag, ok := ctx.Value(interop.RequesterTagCtxKey).(tags.Tags)
+		if ok {
+			value, ok := requesterTag.GetAsInt("mediaServerQuota")
 			if ok {
-				value, ok := requesterTag.GetAsInt("mediaServerQuota")
-				if ok {
-					quota = int64(value)
-				}
+				quota = int64(value)
 			}
-		*/
+		}
 
 		var req struct {
 			ContentType string `json:"contentType"`

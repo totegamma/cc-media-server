@@ -479,8 +479,8 @@ github.com/tendermint/go-amino v0.16.0 h1:GyhmgQKvqF82e2oZeuMSp9JTN0N09emoSZlb2l
 github.com/tendermint/go-amino v0.16.0/go.mod h1:TQU0M1i/ImAo+tYpZi73AU3V/dKeCoMC9Sphe2ZwGME=
 github.com/tidwall/btree v1.7.0 h1:L1fkJH/AuEh5zBnnBbmTwQ5Lt+bRJ5A8EWecslvo9iI=
 github.com/tidwall/btree v1.7.0/go.mod h1:twD9XRA5jj9VUQGELzDO4HPQTNJsoWWfYEL+EUQ2cKY=
-github.com/totegamma/concrnt-playground v0.0.41 h1:0L9Qtu22ujiYMMVgjf/HA/HyhXJTWrNTuB/55dtKvvA=
-github.com/totegamma/concrnt-playground v0.0.41/go.mod h1:VwnOcZ32A80rbCUvUcfqFuWO4+nUi04NDD8cE56pHJs=
+github.com/totegamma/concrnt-playground v0.0.42 h1:7zdOVVNmBX6VQdm7uP265ihwRyVtn+Abjz0R9E+kgew=
+github.com/totegamma/concrnt-playground v0.0.42/go.mod h1:VwnOcZ32A80rbCUvUcfqFuWO4+nUi04NDD8cE56pHJs=
 github.com/tv42/httpunix v0.0.0-20150427012821-b75d8614f926/go.mod h1:9ESjWnEqriFuLhtthL60Sar/7RFoluCcXsuvEwTV5KM=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
