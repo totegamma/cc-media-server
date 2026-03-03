@@ -111,13 +111,13 @@ func main() {
 		return c.JSON(http.StatusOK, interop.CCInfo{
 			Name:    "github.com/totegamma/cc-media-server",
 			Version: version,
-			Endpoints: map[string]concrnt.ConcrntEndpoint{
-				"net.concrnt.storage.user":    {Template: "/user", Method: http.MethodGet},
-				"net.concrnt.storage.upload":  {Template: "/files", Method: http.MethodPost},
-				"net.concrnt.storage.presign": {Template: "/presign", Method: http.MethodPost},
-				"net.concrnt.storage.list":    {Template: "/files", Method: http.MethodGet, Query: &[]string{"after", "before", "limit"}},
-				"net.concrnt.storage.delete":  {Template: "/file/{id}", Method: http.MethodDelete},
-				"net.concrnt.storage.resolve": {Template: "/resolve/{hash}", Method: http.MethodGet},
+			Endpoints: map[string]string{
+				"net.concrnt.storage.user":    "/user",
+				"net.concrnt.storage.upload":  "/files",
+				"net.concrnt.storage.presign": "/presign",
+				"net.concrnt.storage.list":    "/files{?after,before,limit}",
+				"net.concrnt.storage.delete":  "/file/{id}",
+				"net.concrnt.storage.resolve": "/resolve/{hash}",
 			},
 		})
 	})
@@ -136,7 +136,6 @@ func main() {
 				quota = int64(value)
 			}
 		}
-
 
 		var user StorageUser
 		err = db.WithContext(ctx).Where("id = ?", requester.CCID).First(&user).Error
