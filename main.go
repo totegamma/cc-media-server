@@ -303,7 +303,7 @@ func main() {
 			file = StorageFile{
 				ID:      fileID,
 				Sha256:  req.Sha256,
-				URL:     publicBaseUrl + requester.CCID + "/" + fileID + extension,
+				URL:     path.Join(publicBaseUrl, requester.CCID, fileID+extension),
 				OwnerID: requester.CCID,
 				Size:    req.Size,
 				Mime:    req.ContentType,
