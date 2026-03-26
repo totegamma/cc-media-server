@@ -284,20 +284,24 @@ func main() {
 			}
 		}
 
+		// create user if not exists
+		err = db.WithContext(ctx).Save(&StorageUser{ID: requester.CCID}).Error
+		if err != nil {
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+
 		var file StorageFile
 		err = db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			var user StorageUser
-			if err := tx.FirstOrCreate(&user, StorageUser{ID: requester.CCID}).Error; err != nil {
-				return err
-			}
 
-			if user.TotalBytes+req.Size > quota {
+			res := tx.Model(&StorageUser{}).
+				Where("id = ? AND total_bytes + ? <= ?", requester.CCID, req.Size, quota).
+				Update("total_bytes", gorm.Expr("total_bytes + ?", req.Size))
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
 				return echo.NewHTTPError(403, "quota exceeded")
-			}
-
-			user.TotalBytes += req.Size
-			if err := tx.Save(&user).Error; err != nil {
-				return err
 			}
 
 			file = StorageFile{
