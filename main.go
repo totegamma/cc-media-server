@@ -10,8 +10,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -203,11 +203,17 @@ func main() {
 			return c.JSON(500, err)
 		}
 
+		fileURL, err := url.JoinPath(publicBaseUrl, requester.ID, fileID+extension)
+		if err != nil {
+			log.Println(err)
+			return c.JSON(500, err)
+		}
+
 		var file StorageFile
 		err = db.FirstOrCreate(&file, StorageFile{
 			ID:      fileID,
 			Sha256:  hex.EncodeToString(hash[:]),
-			URL:     path.Join(publicBaseUrl, requester.ID, fileID+extension),
+			URL:     fileURL,
 			OwnerID: requester.ID,
 			Size:    size,
 			Mime:    contentType,
@@ -303,10 +309,14 @@ func main() {
 				return echo.NewHTTPError(403, "quota exceeded")
 			}
 
+			fileURL, err := url.JoinPath(publicBaseUrl, requester.ID, fileID+extension)
+			if err != nil {
+				return err
+			}
 			file = StorageFile{
 				ID:      fileID,
 				Sha256:  req.Sha256,
-				URL:     path.Join(publicBaseUrl, requester.ID, fileID+extension),
+				URL:     fileURL,
 				OwnerID: requester.ID,
 				Size:    req.Size,
 				Mime:    req.ContentType,
