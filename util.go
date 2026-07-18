@@ -11,6 +11,19 @@ import (
 	"net/url"
 )
 
+func isSha256Hex(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for i := range len(s) {
+		c := s[i]
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F') {
+			return false
+		}
+	}
+	return true
+}
+
 func extensionFromContentType(contentType string) string {
 	if contentType == "" {
 		return ""

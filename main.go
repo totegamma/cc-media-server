@@ -223,6 +223,8 @@ func main() {
 			return c.JSON(500, err)
 		}
 
+		file.SetCcfs()
+
 		return c.JSON(200, echo.Map{"status": "ok", "content": file})
 	})
 
@@ -256,6 +258,10 @@ func main() {
 
 		if req.Sha256 == "" {
 			return c.JSON(400, echo.Map{"error": "sha256 is required"})
+		}
+
+		if !isSha256Hex(req.Sha256) {
+			return c.JSON(400, echo.Map{"error": "sha256 must be 64 hex characters"})
 		}
 
 		if req.ContentType == "" {
@@ -335,6 +341,8 @@ func main() {
 			log.Println(err)
 			return c.JSON(500, err)
 		}
+
+		file.SetCcfs()
 
 		return c.JSON(200, echo.Map{
 			"status": "ok",
@@ -421,6 +429,10 @@ func main() {
 			}
 		}
 
+		for i := range files {
+			files[i].SetCcfs()
+		}
+
 		result := FilesResponse{
 			Status:  "ok",
 			Content: files,
@@ -494,6 +506,8 @@ func main() {
 			log.Println(err)
 			return c.JSON(500, err)
 		}
+
+		file.SetCcfs()
 
 		c.Response().Header().Set("Location", file.URL)
 		return c.JSON(301, echo.Map{"status": "ok", "content": file})
