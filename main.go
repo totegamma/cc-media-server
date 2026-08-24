@@ -27,8 +27,8 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
-	"github.com/totegamma/concrnt-playground/impl/interop"
-	"github.com/totegamma/concrnt-playground/impl/tags"
+	"github.com/concrnt/concrnt/impl/interop"
+	"github.com/concrnt/concrnt/impl/tags"
 
 	_ "github.com/joho/godotenv/autoload"
 )
